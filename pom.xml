@@ -29,12 +29,12 @@
     <version>1.0.0-SNAPSHOT</version>
     <packaging>bundle</packaging>
 
-    <description>ONOS OSGi bundle archetype</description>
-    <url>http://onosproject.org</url>
+    <description>DDoS Attack Recognition and Mitigation.</description>
+    <url>https://github.com/ortega-kb/darm.git</url>
 
     <properties>
         <onos.app.name>org.ortega.darm</onos.app.name>
-        <onos.app.title>DDoS Attack Recognition &amp; Mitigation.</onos.app.title>
+        <onos.app.title>DDoS Attack Recognition and Mitigation.</onos.app.title>
         <onos.app.origin>Ortega Kabwe M.</onos.app.origin>
         <onos.app.category>Traffic Engineering</onos.app.category>
         <onos.app.url>https://github.com/ortega-kb/darm.git</onos.app.url>
