@@ -50,6 +50,24 @@
         </dependency>
 
         <dependency>
+            <groupId>org.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
+            <version>1.8.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>3.9.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.lz4</groupId>
+                    <artifactId>lz4-java</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
             <groupId>org.onosproject</groupId>
             <artifactId>onlab-osgi</artifactId>
             <version>${onos.version}</version>
@@ -88,7 +106,26 @@
                 </configuration>
                 -->
             </plugin>
+            <plugin>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>maven-bundle-plugin</artifactId>
+                <configuration>
+                    <instructions>
+                        <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
+                        <Import-Package>
+                            org.onosproject.*;version="[2.7,3)",
+                            org.apache.kafka.*;resolution:=optional,
+                            *
+                        </Import-Package>
+                        <DynamicImport-Package>*</DynamicImport-Package>
+                        <Export-Package>
+                            org.ortega;version="1.0.0"
+                        </Export-Package>
+                    </instructions>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
+
 
 </project>

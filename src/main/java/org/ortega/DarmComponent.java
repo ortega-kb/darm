@@ -15,7 +15,8 @@
  */
 package org.ortega;
 
-import org.onlab.packet.Ethernet;
+import org.apache.kafka.clients.producer.*;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.net.Device;
@@ -33,6 +34,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.ortega.topology.TopologyMetricsManager;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.util.Dictionary;
 import java.util.Map;
 import java.util.Properties;
@@ -44,17 +47,21 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.ortega.OsgiPropertyConstants.*;
+import static org.ortega.topology.MetricsPropertyConstants.*;
 
 @Component(immediate = true,
         service = DarmComponent.class,
         property = {
                 INTERVAL_METRICS + ":Integer=" + INTERVAL_METRICS_DEFAULT,
                 TRAFFIC_THRESHOLD + ":Long=" + TRAFFIC_THRESHOLD_DEFAULT,
-                INACTIVITY_TIMEOUT + ":Integer=" + INACTIVITY_TIMEOUT_DEFAULT
+                INACTIVITY_TIMEOUT + ":Integer=" + INACTIVITY_TIMEOUT_DEFAULT,
+                KAFKA_BOOTSTRAP_SERVERS + ":String=" + KAFKA_BOOTSTRAP_SERVERS_DEFAULT,
+                KAFKA_TOPIC + ":String=" + KAFKA_TOPIC_DEFAULT
         })
 public class DarmComponent {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
+    private final ObjectMapper jsonMapper = new ObjectMapper();
 
     // Services references
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
@@ -76,6 +83,8 @@ public class DarmComponent {
     private int intervalMetrics = INTERVAL_METRICS_DEFAULT;
     private long trafficThreshold = TRAFFIC_THRESHOLD_DEFAULT;
     private int inactivityTimeout = INACTIVITY_TIMEOUT_DEFAULT;
+    private String kafkaBootstrapServers = KAFKA_BOOTSTRAP_SERVERS_DEFAULT;
+    private String kafkaTopic = KAFKA_TOPIC_DEFAULT;
 
     // State management
     private final AtomicBoolean trafficDetected = new AtomicBoolean(false);
@@ -86,6 +95,9 @@ public class DarmComponent {
     private ScheduledExecutorService trafficMonitorExecutor;
     private ScheduledExecutorService metricsCollectorExecutor;
 
+    // Kafka producer
+    private KafkaProducer<String, String> kafkaProducer;
+
     // Packet processor for control plane traffic
     private final TrafficDetectionProcessor packetProcessor = new TrafficDetectionProcessor();
 
@@ -94,10 +106,13 @@ public class DarmComponent {
         cfgService.registerProperties(getClass());
         packetService.addProcessor(packetProcessor, PacketProcessor.director(2));
 
+        // Initialize Kafka producer
+        initializeKafkaProducer();
+
         startTrafficMonitoring();
         log.info("DDoS Attack Recognition and Mitigation started with config: "
-                        + "interval={}s, threshold={} packets, inactivity={}s",
-                intervalMetrics, trafficThreshold, inactivityTimeout);
+                        + "interval={}s, threshold={} packets, inactivity={}s, kafka={}",
+                intervalMetrics, trafficThreshold, inactivityTimeout, kafkaBootstrapServers);
     }
 
     @Deactivate
@@ -105,6 +120,13 @@ public class DarmComponent {
         cfgService.unregisterProperties(getClass(), false);
         packetService.removeProcessor(packetProcessor);
         stopAllExecutors();
+
+        // Close Kafka producer
+        if (kafkaProducer != null) {
+            kafkaProducer.close();
+            log.info("Kafka producer closed");
+        }
+
         log.info("DDoS Attack Recognition and Mitigation stopped");
     }
 
@@ -115,9 +137,51 @@ public class DarmComponent {
         intervalMetrics = Tools.getIntegerProperty(properties, INTERVAL_METRICS, INTERVAL_METRICS_DEFAULT);
         trafficThreshold = Tools.getLongProperty(properties, TRAFFIC_THRESHOLD);
         inactivityTimeout = Tools.getIntegerProperty(properties, INACTIVITY_TIMEOUT, INACTIVITY_TIMEOUT_DEFAULT);
+        kafkaBootstrapServers = getProperty(properties, KAFKA_BOOTSTRAP_SERVERS, KAFKA_BOOTSTRAP_SERVERS_DEFAULT);
+        kafkaTopic = getProperty(properties, KAFKA_TOPIC, KAFKA_TOPIC_DEFAULT);
 
-        log.info("Reconfigured: interval={}s, threshold={}, inactivity={}s",
-                intervalMetrics, trafficThreshold, inactivityTimeout);
+        // Reinitialize Kafka producer if config changed
+        if (kafkaProducer != null) {
+            kafkaProducer.close();
+        }
+        initializeKafkaProducer();
+
+        log.info("Reconfigured: interval={}s, threshold={}, inactivity={}s, kafka={}",
+                intervalMetrics, trafficThreshold, inactivityTimeout, kafkaBootstrapServers);
+    }
+
+    private String getProperty(Dictionary<?, ?> properties, String key, String defaultValue) {
+        Object value = properties.get(key);
+        return value != null ? value.toString() : defaultValue;
+    }
+
+    /**
+     * Initializes Kafka producer with Docker-friendly configuration
+     */
+    private void initializeKafkaProducer() {
+        try {
+            Properties props = new Properties();
+            props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaBootstrapServers);
+
+            props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, OsgiStringSerializer.class);
+            props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, OsgiStringSerializer.class);
+
+            // Optimizations for Docker environment
+            props.put(ProducerConfig.ACKS_CONFIG, "1");
+            props.put(ProducerConfig.RETRIES_CONFIG, 3);
+            props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 1);
+            props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 15000);
+            props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 30000);
+
+            // Compression for network efficiency
+            // props.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "lz4");
+
+            kafkaProducer = new KafkaProducer<>(props);
+            log.info("Kafka producer initialized for topic: {}", kafkaTopic);
+        } catch (Exception e) {
+            log.error("Failed to initialize Kafka producer", e);
+            throw new RuntimeException("Kafka producer initialization failed", e);
+        }
     }
 
     /**
@@ -153,7 +217,7 @@ public class DarmComponent {
             } catch (Exception e) {
                 log.error("Traffic monitoring error", e);
             }
-        }, 0, 2, TimeUnit.SECONDS); // Check every 2 seconds
+        }, 0, 2, TimeUnit.SECONDS);
     }
 
     /**
@@ -165,7 +229,7 @@ public class DarmComponent {
         for (Device device : deviceService.getDevices()) {
             for (FlowEntry flow : flowRuleService.getFlowEntries(device.id())) {
                 if (flow instanceof StoredFlowEntry) {
-                    totalPackets += flow.packets();
+                    totalPackets += ((StoredFlowEntry) flow).packets();
                 }
             }
         }
@@ -188,13 +252,37 @@ public class DarmComponent {
                 if (manager != null) {
                     Map<String, Object> metrics = manager.getMetrics();
                     if (isSignificantTraffic(metrics)) {
-                        log.info("Network Metrics: {}", metrics);
+                        sendToKafka(metrics);
                     }
                 }
             } catch (Exception e) {
                 log.error("Metrics collection error", e);
             }
         }, 0, intervalMetrics, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Sends metrics to Kafka
+     */
+    private void sendToKafka(Map<String, Object> metrics) {
+        try {
+            // Convert metrics to JSON
+            String json = jsonMapper.writeValueAsString(metrics);
+
+            // Create Kafka record
+            ProducerRecord<String, String> record = new ProducerRecord<>(kafkaTopic, json);
+
+            // Send asynchronously with callback
+            kafkaProducer.send(record, (metadata, exception) -> {
+                if (exception != null) {
+                    log.error("Failed to send metrics to Kafka topic {}", kafkaTopic, exception);
+                } else {
+                    log.debug("Metrics sent to Kafka [{}:{}]", metadata.topic(), metadata.partition());
+                }
+            });
+        } catch (Exception e) {
+            log.error("Kafka serialization/send error", e);
+        }
     }
 
     /**
@@ -209,11 +297,11 @@ public class DarmComponent {
     }
 
     /**
-     * Checks if traffic is significant enough to log
+     * Checks if traffic is significant enough to send
      */
     private boolean isSignificantTraffic(Map<String, Object> metrics) {
-        long frames = (long) metrics.getOrDefault("frames", 0L);
-        long flows = (long) metrics.getOrDefault("flows", 0L);
+        long frames = (long) metrics.getOrDefault(FRAMES, 0L);
+        long flows = (long) metrics.getOrDefault(FLOWS, 0L);
         return frames > trafficThreshold || flows > 0;
     }
 
@@ -230,7 +318,7 @@ public class DarmComponent {
     }
 
     /**
-     * Packet processor that detects control plane traffic
+     * Custom packet processor for traffic detection
      */
     private static class TrafficDetectionProcessor implements PacketProcessor {
         private final AtomicLong lastPacketTime = new AtomicLong(0);
@@ -241,7 +329,10 @@ public class DarmComponent {
                 return;
             }
 
+            // Update last packet time
             lastPacketTime.set(System.currentTimeMillis());
+
+            // Block packet to prevent further processing if needed
             context.block();
         }
 
@@ -249,7 +340,7 @@ public class DarmComponent {
          * Checks if we've seen control plane traffic recently
          */
         public boolean hasRecentTraffic() {
-            return (System.currentTimeMillis() - lastPacketTime.get()) < 5000;
+            return (System.currentTimeMillis() - lastPacketTime.get()) < 5000; // 5 seconds
         }
     }
 }

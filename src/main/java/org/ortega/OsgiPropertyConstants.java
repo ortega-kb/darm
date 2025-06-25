@@ -14,4 +14,10 @@ public final class OsgiPropertyConstants {
     // Inactivity timeout before stopping collection (seconds)
     public static final String INACTIVITY_TIMEOUT = "inactivityTimeout";
     public static final int INACTIVITY_TIMEOUT_DEFAULT = 10;
+
+    // Kafka configuration
+    public static final String KAFKA_BOOTSTRAP_SERVERS = "kafkaBootstrapServers";
+    public static final String KAFKA_BOOTSTRAP_SERVERS_DEFAULT = "localhost:9092";
+    public static final String KAFKA_TOPIC = "kafkaTopic";
+    public static final String KAFKA_TOPIC_DEFAULT = "network-metrics";
 }
