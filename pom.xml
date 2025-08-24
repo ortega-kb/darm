@@ -38,7 +38,17 @@
         <onos.app.origin>Ortega Kabwe M.</onos.app.origin>
         <onos.app.category>Traffic Engineering</onos.app.category>
         <onos.app.url>https://github.com/ortega-kb/darm.git</onos.app.url>
-        <onos.app.readme>An ONOS application for network information gathering and live anomaly detection in an SDN network.</onos.app.readme>
+        <onos.app.readme>An ONOS application for network information gathering and live anomaly detection in an SDN
+            network.
+        </onos.app.readme>
+
+        <web.context>/onos/darm/v1</web.context>
+        <api.version>1.0.0</api.version>
+        <api.title>DDoS Attack Recognition and Mitigation REST</api.title>
+        <api.description>
+            DDoS Attack Recognition and Mitigation REST API
+        </api.description>
+        <api.package>org.ortega</api.package>
     </properties>
 
     <dependencies>
@@ -88,7 +98,51 @@
             <scope>test</scope>
             <classifier>tests</classifier>
         </dependency>
+
+        <dependency>
+            <groupId>org.onosproject</groupId>
+            <artifactId>onos-rest</artifactId>
+            <version>${onos.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.onosproject</groupId>
+            <artifactId>onlab-rest</artifactId>
+            <version>${onos.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>javax.ws.rs</groupId>
+            <artifactId>javax.ws.rs-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.glassfish.jersey.containers</groupId>
+            <artifactId>jersey-container-servlet</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.karaf.shell</groupId>
+            <artifactId>org.apache.karaf.shell.console</artifactId>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
+
 
     <build>
         <plugins>
@@ -121,6 +175,15 @@
                         <Export-Package>
                             org.ortega;version="1.0.0"
                         </Export-Package>
+                        <_wab>src/main/webapp/</_wab>
+                        <Include-Resource>
+                            WEB-INF/classes/apidoc/swagger.json=target/swagger.json,
+                            {maven-resources}
+                        </Include-Resource>
+                        <Import-Package>
+                            *,org.glassfish.jersey.servlet
+                        </Import-Package>
+                        <Web-ContextPath>${web.context}</Web-ContextPath>
                     </instructions>
                 </configuration>
             </plugin>

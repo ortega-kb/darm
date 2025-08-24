@@ -5,7 +5,7 @@ public final class OsgiPropertyConstants {
 
     // Metric collection interval (seconds)
     public static final String INTERVAL_METRICS = "intervalMetrics";
-    public static final int INTERVAL_METRICS_DEFAULT = 2;
+    public static final int INTERVAL_METRICS_DEFAULT = 5;
 
     // Minimum packets to consider traffic present
     public static final String TRAFFIC_THRESHOLD = "trafficThreshold";
@@ -17,7 +17,7 @@ public final class OsgiPropertyConstants {
 
     // Kafka configuration
     public static final String KAFKA_BOOTSTRAP_SERVERS = "kafkaBootstrapServers";
-    public static final String KAFKA_BOOTSTRAP_SERVERS_DEFAULT = "localhost:9092";
+    public static final String KAFKA_BOOTSTRAP_SERVERS_DEFAULT = "kafka:9093";
     public static final String KAFKA_TOPIC = "kafkaTopic";
     public static final String KAFKA_TOPIC_DEFAULT = "network-metrics";
 }
